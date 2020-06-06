@@ -2,6 +2,7 @@ import tensorflow as tf
 import argparse
 import os.path
 import sys
+import datetime
 
 import models
 import models_tf2
@@ -260,10 +261,7 @@ if __name__ == "__main__":
     time_shift_samples = int((FLAGS.time_shift_ms * FLAGS.sample_rate) / 1000)
 
     model = models_tf2.create_model(
-        None,
-        model_settings,
-        model_architecture="tiny_conv",
-        is_training=True,
+        model_settings, FLAGS.model_architecture
     )
 
     model.compile(
@@ -273,18 +271,56 @@ if __name__ == "__main__":
         # List of metrics to monitor
         metrics=["sparse_categorical_accuracy"],
     )
+    model.summary()
 
-    steps = 1000
-    for step in range(steps):
-        train_fingerprints, train_ground_truth = audio_processor.get_data(
-            how_many=FLAGS.batch_size,
-            offset=0,
-            model_settings=model_settings,
-            background_frequency=FLAGS.background_frequency,
-            background_volume_range=FLAGS.background_volume,
-            time_shift=time_shift_samples,
-            mode="training",
-            sess=sess,
-        )
-        model.train_on_batch(train_fingerprints, train_ground_truth)
-        print(step, ' ', end='')
+    # steps = 1000
+    # for step in range(steps):
+    #     train_fingerprints, train_ground_truth = audio_processor.get_data(
+    #         how_many=FLAGS.batch_size,
+    #         offset=0,
+    #         model_settings=model_settings,
+    #         background_frequency=FLAGS.background_frequency,
+    #         background_volume_range=FLAGS.background_volume,
+    #         time_shift=time_shift_samples,
+    #         mode="training",
+    #         sess=sess,
+    #     )
+    #     model.train_on_batch(train_fingerprints, train_ground_truth)
+    #     print(step, ' ', end='')
+
+    train_fingerprints, train_ground_truth = audio_processor.get_data(
+        how_many=FLAGS.batch_size,
+        offset=0,
+        model_settings=model_settings,
+        background_frequency=FLAGS.background_frequency,
+        background_volume_range=FLAGS.background_volume,
+        time_shift=time_shift_samples,
+        mode="training",
+        sess=sess,
+    )
+    val_fingerprints, val_ground_truth = audio_processor.get_data(
+        how_many=int(FLAGS.batch_size/10),
+        offset=0,
+        model_settings=model_settings,
+        background_frequency=FLAGS.background_frequency,
+        background_volume_range=FLAGS.background_volume,
+        time_shift=time_shift_samples,
+        mode="validation",
+        sess=sess,
+    )
+    print("\nTraining data shape:")
+    print(train_fingerprints.shape)
+    print()
+
+    tensorboard_path = "./logs/fit/"+datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_path)
+
+    checkpoint_path = "training/"+datetime.datetime.now().strftime("%Y%m%d-%H%M%S")+"/cp-{epoch:02d}"
+    checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+        filepath=checkpoint_path,
+        save_weights_only=True,
+        verbose=0,
+        save_freq='epoch'
+    )
+
+    model.fit(train_fingerprints, train_ground_truth, validation_data=(val_fingerprints, val_ground_truth), batch_size=100, epochs=75, callbacks=[tensorboard_callback, checkpoint_callback])
