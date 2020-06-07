@@ -1,99 +1,36 @@
+from attributedict.collections import AttributeDict
+import math
+
+# Audio
+import pyaudio
+import wave
 from sys import byteorder
 from array import array
 from struct import pack
 
-from attributedict.collections import AttributeDict
-
-import pyaudio
-import wave
-import math
-
 import numpy as np
-
 import matplotlib.pyplot as plt
-
 import tensorflow as tf
+from tensorflow.keras import Sequential
 
-import argparse
-
-import models
+# Custom
 import models_tf2
 
-THRESHOLD = 500
+# You can tune these
+THRESHOLD = 500  # silence threshold, on -32k to 32k scale
+MAXIMUM = 2 ** 15 * 0.75  # volume scaling
+
+# Don't mess
 CHUNK_SIZE = 1024
 FORMAT = pyaudio.paInt16
-RATE = 16000
-DESIRED_DURATION = 1.0  # s
-MAXIMUM = 2 ** 15 * 0.75
 INT16_MULTIPLIER = 2 ** 15 - 1.0
-
-
+RATE = 16000
 WINDOW_FRAMES = int(RATE * 0.030)
 STEP_FRAMES = int(RATE * 0.010)
+MFCCS_TO_KEEP = 40
 
-
-def prepare_model_settings(
-    label_count,
-    sample_rate,
-    clip_duration_ms,
-    window_size_ms,
-    window_stride_ms,
-    feature_bin_count,
-    preprocess,
-):
-    """Calculates common settings needed for all models.
-
-  Args:
-    label_count: How many classes are to be recognized.
-    sample_rate: Number of audio samples per second.
-    clip_duration_ms: Length of each audio clip to be analyzed.
-    window_size_ms: Duration of frequency analysis window.
-    window_stride_ms: How far to move in time between frequency windows.
-    feature_bin_count: Number of frequency bins to use for analysis.
-    preprocess: How the spectrogram is processed to produce features.
-
-  Returns:
-    Dictionary containing common settings.
-
-  Raises:
-    ValueError: If the preprocessing mode isn't recognized.
-  """
-    desired_samples = int(sample_rate * clip_duration_ms / 1000)
-    window_size_samples = int(sample_rate * window_size_ms / 1000)
-    window_stride_samples = int(sample_rate * window_stride_ms / 1000)
-    length_minus_window = desired_samples - window_size_samples
-    if length_minus_window < 0:
-        spectrogram_length = 0
-    else:
-        spectrogram_length = 1 + int(length_minus_window / window_stride_samples)
-    if preprocess == "average":
-        fft_bin_count = 1 + (_next_power_of_two(window_size_samples) / 2)
-        average_window_width = int(math.floor(fft_bin_count / feature_bin_count))
-        fingerprint_width = int(math.ceil(fft_bin_count / average_window_width))
-    elif preprocess == "mfcc":
-        average_window_width = -1
-        fingerprint_width = feature_bin_count
-    elif preprocess == "micro":
-        average_window_width = -1
-        fingerprint_width = feature_bin_count
-    else:
-        raise ValueError(
-            'Unknown preprocess mode "%s" (should be "mfcc",'
-            ' "average", or "micro")' % (preprocess)
-        )
-    fingerprint_size = fingerprint_width * spectrogram_length
-    return {
-        "desired_samples": desired_samples,
-        "window_size_samples": window_size_samples,
-        "window_stride_samples": window_stride_samples,
-        "spectrogram_length": spectrogram_length,
-        "fingerprint_width": fingerprint_width,
-        "fingerprint_size": fingerprint_size,
-        "label_count": label_count,
-        "sample_rate": sample_rate,
-        "preprocess": preprocess,
-        "average_window_width": average_window_width,
-    }
+# for original model
+LABEL_COUNT = 12
 
 
 def add_beginning_silence(snd_data, seconds):
@@ -119,7 +56,7 @@ def normalize(snd_data):
     return r
 
 
-def record():
+def record(duration=1.0):
     """
     Record a word or words from the microphone and 
     return the data as an array of signed shorts.
@@ -160,7 +97,7 @@ def record():
             r.extend(snd_data)
             chunks += 1
 
-            if chunks >= DESIRED_DURATION * RATE / CHUNK_SIZE:
+            if chunks >= duration * RATE / CHUNK_SIZE:
                 break
 
     print("Done.", flush=True)
@@ -172,27 +109,23 @@ def record():
 
     r = add_beginning_silence(r, 0.2)
     r = normalize(r)
-    r = r[0 : int(DESIRED_DURATION * RATE)]
+    r = r[0 : int(duration * RATE)]
     return sample_width, r
 
 
-def save_mfcc(numpy_path, wav_path):
-    "Records from the microphone and outputs the resulting data to 'path'"
-
-    # Record live audio from microphone
-    sample_width, data = record()
-
-    # convert from short array to float and scale to [-1,  1]
-    raw = np.frombuffer(data, dtype=np.int16).astype(float) / INT16_MULTIPLIER
-    audio = tf.convert_to_tensor(raw, dtype=tf.float32)
-
-    # get spectrogram
+def normalized_audio_to_mfcc(audio):
     stfts = tf.signal.stft(audio, frame_length=WINDOW_FRAMES, frame_step=STEP_FRAMES)
-    spectrogram = tf.abs(stfts)
+    spectrogram = tf.square(tf.abs(stfts))
+    # Also works well without squaring...
+    # spectrogram = tf.abs(stfts)
 
     # get mel-scale
     num_spectrogram_bins = spectrogram.shape[-1]
-    lower_edge_hertz, upper_edge_hertz, num_mel_bins = 20.0, 4000.0, 40
+    lower_edge_hertz, upper_edge_hertz, num_mel_bins = (
+        20.0,
+        4000.0,
+        MFCCS_TO_KEEP,
+    )  # Set to the defaults for tf.ops.mfcc
     linear_to_mel_weight_matrix = tf.signal.linear_to_mel_weight_matrix(
         num_mel_bins, num_spectrogram_bins, RATE, lower_edge_hertz, upper_edge_hertz,
     )
@@ -207,10 +140,36 @@ def save_mfcc(numpy_path, wav_path):
     # Compute MFCCs from log_mel_spectrograms and take the first 13.
     mfccs = tf.signal.mfccs_from_log_mel_spectrograms(log_mel_spectrograms)
 
+    # For some reason, does not give the same result as the mfccs. Average euclidean distance is 550
+    # When using mfcc2, the predictor also behaves very poorly
+    # making the magnitude squared doesn't seem to affect much...
+    # spec2 = tf.raw_ops.AudioSpectrogram(input=audio[:, tf.newaxis], window_size=WINDOW_FRAMES, stride=STEP_FRAMES, magnitude_squared=False)
+    # mfcc2 = tf.raw_ops.Mfcc(spectrogram=spec2, sample_rate=RATE, dct_coefficient_count=40)
+    # print("norm diff: ",end="")
+    # print(tf.norm(mfcc2-mfccs))
+
+    return mfccs
+
+
+def normalize_audio(data):
+    raw = np.frombuffer(data, dtype=np.int16).astype(float) / INT16_MULTIPLIER
+    audio = tf.convert_to_tensor(raw, dtype=tf.float32)
+    return audio
+
+
+def save_mfcc(numpy_path, wav_path):
+    "Records from the microphone and outputs the resulting data to 'path'"
+
+    # Record live audio from microphone
+    sample_width, data = record()
+    # Convert from int16 to [-1,1] float
+    audio = normalize_audio(data)
+    # get mffcs from raw audio
+    mfccs = normalized_audio_to_mfcc(audio)
+
     np.save(numpy_path, mfccs, allow_pickle=False)
 
     data = pack("<" + ("h" * len(data)), *data)
-
     wf = wave.open(wav_path, "wb")
     wf.setnchannels(1)
     wf.setsampwidth(sample_width)
@@ -222,41 +181,32 @@ def save_mfcc(numpy_path, wav_path):
 
 
 if __name__ == "__main__":
-    FLAGS = AttributeDict(
-        {
-            "sample_rate": 1600,
-            "clip_duration_ms": 1000,
-            "window_size_ms": 30,
-            "window_stride_ms": 10,
-            "feature_bin_count": 40,
-            "preprocess": "mfcc",
-            "model_architecture": "conv",
-            "wanted_words": "yes,no,up,down,left,right,on,off,stop,go",
-        }
-    )
-
-    model_settings = prepare_model_settings(
-        12,
-        FLAGS.sample_rate,
-        FLAGS.clip_duration_ms,
-        FLAGS.window_size_ms,
-        FLAGS.window_stride_ms,
-        FLAGS.feature_bin_count,
-        FLAGS.preprocess,
-    )
-
-    model = models_tf2.create_model(model_settings, FLAGS.model_architecture)
+    model_settings = {
+        "fingerprint_width": 40,
+        "spectrogram_length": 98,
+        "label_count": 12,
+    }
+    model = models_tf2.create_conv(model_settings)
+    embedding_model = Sequential(model.layers[:-1])
 
     checkpoint_path = "training/20200604-213003/cp-75"
     model.load_weights(checkpoint_path)
 
-    for i in range(10):
-        out = save_mfcc(f"recordings/mfcc{i}.npy", f"recordings/recording_{i}.wav")
-        print(out)
+    folder = "random"
+    start_i = 20
+    for i in range(start_i, 20 + start_i):
+        out = save_mfcc(
+            f"recordings/{folder}/mfcc{i}.npy", f"recordings/{folder}/recording_{i}.wav"
+        )
+
+        # Kind of dumb given that the model will just reshape to 98x40 anyways
         input_tensor = tf.reshape(out, [1, 3920])
-        print(input_tensor)
-        label_idx = np.argmax(model.predict(input_tensor), axis=1)[0]
-        print(f"label index: {label_idx}")
+
+        embedding = embedding_model(input_tensor)
+        np.save(f"recordings/{folder}/embedding{i}.npy", embedding, allow_pickle=False)
+
+        label_idx = np.argmax(model(input_tensor), axis=1)[0]
+        # print(f"label index: {label_idx}")
         labels = [
             "silence",
             "unknown",

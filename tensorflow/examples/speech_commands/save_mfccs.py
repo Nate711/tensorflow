@@ -263,42 +263,30 @@ if __name__ == "__main__":
     label_count = model_settings["label_count"]
     time_shift_samples = int((FLAGS.time_shift_ms * FLAGS.sample_rate) / 1000)
 
-    model = models_tf2.create_model(
-        model_settings, FLAGS.model_architecture
-    )
-
-    checkpoint_path = "training/20200604-213003/cp-75"
-    model.load_weights(checkpoint_path)
-    model2 = Sequential(model.layers[0:-1])
-    
-    model.summary()
-    model2.summary()
- 
-    val_fingerprints, val_ground_truth = audio_processor.get_data(
-        how_many=5,
+    train_fingerprints, train_ground_truth = audio_processor.get_data(
+        how_many=1000,
         offset=0,
         model_settings=model_settings,
         background_frequency=FLAGS.background_frequency,
         background_volume_range=FLAGS.background_volume,
         time_shift=time_shift_samples,
-        mode="validation",
+        mode="training",
         sess=sess,
     )
-    print(val_ground_truth)
+    np.save("recordings/speech_commands/X.npy", train_fingerprints)
+    np.save("recordings/speech_commands/y.npy", train_ground_truth)
 
-    # out = model.predict(val_fingerprints)
-    # print(out)
+    val_fingerprints, val_ground_truth = audio_processor.get_data(
+        how_many=1000,
+        offset=0,
+        model_settings=model_settings,
+        background_frequency=FLAGS.background_frequency,
+        background_volume_range=FLAGS.background_volume,
+        time_shift=time_shift_samples,
+        mode="training",
+        sess=sess,
+    )
+    np.save("recordings/speech_commands/X_val.npy", val_fingerprints)
+    np.save("recordings/speech_commands/y_val.npy", val_ground_truth)
 
-    out2 = model2.predict(val_fingerprints)
-    print(out2)
     
-    # def logistic(x):
-    #     return 1 / (1 + np.exp(-x))
-    # probs = logistic(out)
-    # labels = np.argmax(probs,axis=1)
-
-    # print(labels)
-    # print(labels == val_ground_truth)
-    # print(list(zip(labels,val_ground_truth)))
-    # loss, acc = model.evaluate(val_fingerprints, val_ground_truth)
-    # print(loss, acc)
