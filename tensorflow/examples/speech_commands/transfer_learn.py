@@ -145,12 +145,13 @@ def test_model_live(path):
         mfcc = get_samples(1)
         mfcc = tf.reshape(mfcc, [mfcc.shape[0], 3920])
         logits = model.predict(mfcc)
-        label = np.argmax(logits, axis=1)
-        print(label)
-
+        label_idx = np.argmax(logits, axis=1)[0]
+        labels=["noise", "pupper"]
+        print("HEARD: ", end="")
+        print(labels[label_idx])
 
 if __name__ == "__main__":
-    train_on_live(40)
+    # train_on_live(40)
     test_model_live("transfer_model/fit")
 
     # train_on_recorded()

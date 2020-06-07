@@ -17,7 +17,7 @@ from tensorflow.keras import Sequential
 import models_tf2
 
 # You can tune these
-THRESHOLD = 500  # silence threshold, on -32k to 32k scale
+THRESHOLD = 1000  # silence threshold, on -32k to 32k scale
 MAXIMUM = 2 ** 15 * 0.75  # volume scaling
 
 # Don't mess

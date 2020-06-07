@@ -2,6 +2,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+import tensorflow as tf
+from tensorflow.keras import Sequential, layers, regularizers
+
+from sklearn.svm import SVC
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
 
 def pairwise_distmatrix(data):
     n = data.shape[0]
@@ -129,17 +136,6 @@ def svd():
     plt.title("Speech embeddings projected onto top 2 principal components")
     plt.legend()
     plt.show()
-
-
-# distance()
-# svd()
-
-import tensorflow as tf
-from tensorflow.keras import Sequential, layers, regularizers
-
-from sklearn.svm import SVC
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
 
 
 def svm():
