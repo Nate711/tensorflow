@@ -96,6 +96,14 @@ def prepare_model_settings(
     }
 
 
+def add_beginning_silence(snd_data, seconds):
+    "Add silence to the start and end of 'snd_data' of length 'seconds' (float)"
+    silence = [0] * int(seconds * RATE)
+    r = array("h", silence)
+    r.extend(snd_data)
+    return r
+
+
 def is_silent(snd_data):
     "Returns 'True' if below the 'silent' threshold"
     return max(snd_data) < THRESHOLD
@@ -162,14 +170,13 @@ def record():
     stream.close()
     p.terminate()
 
+    r = add_beginning_silence(r, 0.2)
     r = normalize(r)
-    r = r[
-        0 : int(DESIRED_DURATION * RATE)
-    ]  # get rid of the bytes at the end due to chunk size
+    r = r[0 : int(DESIRED_DURATION * RATE)]
     return sample_width, r
 
 
-def save_mfcc_tensor(path):
+def save_mfcc(numpy_path, wav_path):
     "Records from the microphone and outputs the resulting data to 'path'"
 
     # Record live audio from microphone
@@ -200,7 +207,16 @@ def save_mfcc_tensor(path):
     # Compute MFCCs from log_mel_spectrograms and take the first 13.
     mfccs = tf.signal.mfccs_from_log_mel_spectrograms(log_mel_spectrograms)
 
-    np.save(path, mfccs, allow_pickle=False)
+    np.save(numpy_path, mfccs, allow_pickle=False)
+
+    data = pack("<" + ("h" * len(data)), *data)
+
+    wf = wave.open(wav_path, "wb")
+    wf.setnchannels(1)
+    wf.setsampwidth(sample_width)
+    wf.setframerate(RATE)
+    wf.writeframes(data)
+    wf.close()
 
     return mfccs
 
@@ -235,7 +251,7 @@ if __name__ == "__main__":
     model.load_weights(checkpoint_path)
 
     for i in range(10):
-        out = save_mfcc_tensor(f"recordings/mfcc{i}.npy")
+        out = save_mfcc(f"recordings/mfcc{i}.npy", f"recordings/recording_{i}.wav")
         print(out)
         input_tensor = tf.reshape(out, [1, 3920])
         print(input_tensor)
