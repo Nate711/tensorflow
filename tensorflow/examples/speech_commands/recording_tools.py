@@ -181,6 +181,12 @@ def save_mfcc(numpy_path, wav_path):
 
 
 if __name__ == "__main__":
+    # This code will prompt you to record your voice for 20 times, 1 second each.
+    # it will then save the data into the folder specified in the line below.
+
+    folder = "pupper"
+    start_i = 40  # The file number to start at
+
     model_settings = {
         "fingerprint_width": 40,
         "spectrogram_length": 98,
@@ -192,8 +198,6 @@ if __name__ == "__main__":
     checkpoint_path = "training/20200604-213003/cp-75"
     model.load_weights(checkpoint_path)
 
-    folder = "random"
-    start_i = 20
     for i in range(start_i, 20 + start_i):
         out = save_mfcc(
             f"recordings/{folder}/mfcc{i}.npy", f"recordings/{folder}/recording_{i}.wav"

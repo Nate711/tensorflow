@@ -263,17 +263,15 @@ if __name__ == "__main__":
     label_count = model_settings["label_count"]
     time_shift_samples = int((FLAGS.time_shift_ms * FLAGS.sample_rate) / 1000)
 
-    model = models_tf2.create_model(
-        model_settings, FLAGS.model_architecture
-    )
+    model = models_tf2.create_model(model_settings, FLAGS.model_architecture)
 
     checkpoint_path = "training/20200604-213003/cp-75"
     model.load_weights(checkpoint_path)
-    model2 = Sequential(model.layers[0:-1])
-    
+    embedding = Sequential(model.layers[0:-1])
+
     model.summary()
-    model2.summary()
- 
+    embedding.summary()
+
     val_fingerprints, val_ground_truth = audio_processor.get_data(
         how_many=5,
         offset=0,
@@ -286,19 +284,10 @@ if __name__ == "__main__":
     )
     print(val_ground_truth)
 
-    # out = model.predict(val_fingerprints)
-    # print(out)
+    out = model.predict(val_fingerprints)
+    print(out)
+    labels = np.argmax(out, axis=1)
+    print(labels)
 
-    out2 = model2.predict(val_fingerprints)
-    print(out2)
-    
-    # def logistic(x):
-    #     return 1 / (1 + np.exp(-x))
-    # probs = logistic(out)
-    # labels = np.argmax(probs,axis=1)
-
-    # print(labels)
-    # print(labels == val_ground_truth)
-    # print(list(zip(labels,val_ground_truth)))
-    # loss, acc = model.evaluate(val_fingerprints, val_ground_truth)
-    # print(loss, acc)
+    e = embedding.predict(val_fingerprints)
+    print(e)

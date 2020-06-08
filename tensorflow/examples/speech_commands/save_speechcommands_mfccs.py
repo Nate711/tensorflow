@@ -289,4 +289,3 @@ if __name__ == "__main__":
     np.save("recordings/speech_commands/X_val.npy", val_fingerprints)
     np.save("recordings/speech_commands/y_val.npy", val_ground_truth)
 
-    

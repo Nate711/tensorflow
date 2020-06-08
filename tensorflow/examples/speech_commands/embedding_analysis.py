@@ -74,7 +74,7 @@ def distance():
     denom = non_pupper.shape[0]
     print(f"{num}/{denom}={num/denom}")
 
-    print("Test set false negatives: ", end="")
+    print("False negatives on test 'pupper' utterances: ", end="")
     test = pupper_test @ pupper_avg > threshold
     num = np.sum(test)
     denom = pupper_test.shape[0]
@@ -172,7 +172,7 @@ def get_name_classifier():
     out2 = 2
     model = Sequential(
         [
-            layers.Dense(out1, kernel_regularizer=regularizers.l2(0.5)),
+            layers.Dense(out1, kernel_regularizer=regularizers.l2(0.1)),
             layers.ReLU(),
             layers.Dropout(0.5),
             layers.Dense(out2),
@@ -217,6 +217,6 @@ def fine_tuning():
 
 
 if __name__ == "__main__":
-    # distance()
-    fine_tuning()
+    distance()
+    # fine_tuning()
     # svm()
