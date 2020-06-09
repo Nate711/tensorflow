@@ -34,6 +34,31 @@ def load_embeddings(folder, n):
         data[i, :] = np.load(f"{folder}/embedding{i}.npy").flatten()
     return data
 
+def nearest_neighbors():
+    other = load_embeddings("recordings/other", 20)
+    pupper = load_embeddings("recordings/pupper", 20)
+    right = load_embeddings("recordings/right", 20)
+    go = load_embeddings("recordings/go", 20)
+    non_pupper = np.concatenate((right, go, other), axis=0)
+    pupper_test = load_embeddings("recordings/pupper_test/", 20)
+    pupper_avg = np.sum(pupper, axis=0) / 20
+
+    pos = distances_to_point(pupper, pupper_avg)
+    print(pos)
+    print(pos.mean())
+    max_dev = np.amax(pos)
+    print(np.sum(pos <= max_dev))
+
+    other = distances_to_point(other, pupper_avg)
+    print(other)
+    print(other.mean())
+    print(np.sum(other <= max_dev))
+
+    test = distances_to_point(pupper_test, pupper_avg)
+    print(test)
+    print(np.mean(test))
+    print(np.sum(test <= max_dev))
+
 
 def distance():
     # average based embedding
@@ -158,8 +183,11 @@ def svm():
     print("\n\nSVM")
     print("Train accuracy: ")
     print(np.sum(clf.predict(X) == y) / X.shape[0])
-    print("Validation accuracy: ")
+    print("Validation accuracy: (true pos)")
     print(np.sum(clf.predict(val_x) == val_y) / val_x.shape[0])
+
+    print("Validation accuracy: (true neg)")
+    print(1-np.sum(clf.predict(other) == 0) / val_x.shape[0])
 
 
 def get_label(logits):
@@ -217,6 +245,7 @@ def fine_tuning():
 
 
 if __name__ == "__main__":
-    distance()
+    # nearest_neighbors()
+    # distance()
     # fine_tuning()
-    # svm()
+    svm()

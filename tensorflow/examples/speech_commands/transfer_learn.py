@@ -131,6 +131,12 @@ def train_on_live(N=20):
     # save it to file
     model.save("transfer_model/fit")
 
+def fake_train_on_live():
+    model = get_transfer_model()
+    mfccs = load_mfcc("recordings/pupper", 20)
+    train_on_name(model, mfccs, repeats=3, speechcommand_samples=60)
+
+    model.save("transfer_model/fit_recorded")
 
 def train_on_recorded():
     model = get_transfer_model()
@@ -159,6 +165,8 @@ def test_model_live(path):
 if __name__ == "__main__":
     train_on_live(N=20)
     test_model_live("transfer_model/fit")
+
+    # fake_train_on_live()
 
     # train_on_recorded()
     # test_model_live("transfer_model/fit_recorded")
